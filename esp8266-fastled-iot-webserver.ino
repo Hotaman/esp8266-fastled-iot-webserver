@@ -55,18 +55,21 @@ extern "C" {
 
 /*######################## MAIN CONFIG ########################*/
 #define LED_TYPE            WS2812B                     // You might also use a WS2811 or any other strip that is Fastled compatible 
-#define DATA_PIN            D3                          // Be aware: the pin mapping might be different on boards like the NodeMCU
+#define DATA_PIN            4                          // Be aware: the pin mapping might be different on boards like the NodeMCU
 //#define CLK_PIN             D5                        // Only required when using 4-pin SPI-based LEDs
 #define CORRECTION          UncorrectedColor            // If colors are weird use TypicalLEDStrip
 #define COLOR_ORDER         GRB                         // Change this if colors are swapped (in my case, red was swapped with green)
-#define MILLI_AMPS          10000                       // IMPORTANT: set the max milli-Amps of your power supply (4A = 4000mA)
+#define MILLI_AMPS          3000                       // IMPORTANT: set the max milli-Amps of your power supply (4A = 4000mA)
 #define VOLTS               5                           // Voltage of the Power Supply
 
 //#define REMOVE_VISUALIZATION          // remove the comment to completly disable all udp-based visualization patterns
 
-#define HOSTNAME "LEDs"                 // Name that appears in your network, don't use whitespaces, use "-" instead
+#define HOSTNAME "Papa-Lamp"            // Name that appears in your network, don't use whitespaces, use "-" instead
+                                        // Also used for the AP ssid
+#define PHY_SW_PIN 0                    // input of On/Off switch if defined
+#define PHY_SW_MOM                      // if defined, using momentary push button switch to toggle On/Off. active low
 
-#define DEVICE_TYPE 0                   // The following types are available
+#define DEVICE_TYPE 3                   // The following types are available
 /*
     0: Generic LED-Strip: a regular LED-Strip without any special arrangement (and Infinity Mirror + Bottle Lighting Pad)
         * Easiest: 5V WS2812B LED-Strip:            https://s.click.aliexpress.com/e/_dZ1hCJ7
@@ -100,13 +103,13 @@ extern "C" {
 // Device Configuration:
 //---------------------------------------------------------------------------------------------------------//
 #if DEVICE_TYPE == 0                // Generic LED-Strip
-    #define NUM_LEDS 24
+    #define NUM_LEDS 60
     //#define NUM_LEDS 33
     //#define NUM_LEDS 183
     #define BAND_GROUPING    1            // Groups part of the band to save performance and network traffic
 #elif DEVICE_TYPE == 1              // LED MATRIX
-    #define LENGTH 32
-    #define HEIGHT 8
+    #define LENGTH 8
+    #define HEIGHT 10
     //#define AddLogoVisualizers          // (only 32x8) Adds Visualization patterns with logo (currently only HBz)
 #elif DEVICE_TYPE == 2              // 7-Segment Clock
     #define NTP_REFRESH_INTERVAL_SECONDS 600            // 10 minutes
@@ -140,7 +143,7 @@ extern "C" {
 //---------------------------------------------------------------------------------------------------------//
 // Feature Configuration: Enabled by removing the "//" in front of the define statements
 //---------------------------------------------------------------------------------------------------------//
-    //#define ACCESS_POINT_MODE                 // the esp8266 will create a wifi-access point instead of connecting to one, credentials must be in Secrets.h
+    #define ACCESS_POINT_MODE                 // the esp8266 will create a wifi-access point instead of connecting to one, credentials must be in Secrets.h
 
     #define ENABLE_OTA_SUPPORT                // requires ArduinoOTA - library, not working on esp's with 1MB memory (esp-01, Wemos D1 lite ...)
         //#define OTA_PASSWORD "passwd123"      //  password that is required to update the esp's firmware wireless
@@ -441,7 +444,7 @@ CRGBPalette16 gTargetPalette(gGradientPalettes[0]);
 CRGBPalette16 IceColors_p = CRGBPalette16(CRGB::Black, CRGB::Blue, CRGB::Aqua, CRGB::White);
 
 uint8_t currentPatternIndex = 2; // Index number of which pattern is current
-uint8_t autoplay = 0;
+uint8_t autoplay = 1;
 
 uint8_t autoplayDuration = 10;
 unsigned long autoPlayTimeout = 0;
@@ -682,6 +685,7 @@ void addRebootPage(int webServerNr)
     #endif // ENABLE_ALEXA_SUPPORT
 }
 
+uint8_t phySwDebounce = 0;  // PHY swith debounce counter
 
 void setup() {
     WiFi.setSleepMode(WIFI_NONE_SLEEP);
@@ -729,6 +733,9 @@ void setup() {
 #endif
 #endif // SOUND_REACTIVE
 
+#ifdef PHY_SW_PIN
+    pinMode(PHY_SW_PIN, INPUT);
+#endif
 
     SPIFFS.begin();
     {
@@ -752,7 +759,7 @@ void setup() {
     String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
         String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
     macID.toUpperCase();
-    String AP_NameString = "ESP8266 Thing " + macID;
+    String AP_NameString = HOSTNAME + macID;
     char AP_NameChar[AP_NameString.length() + 1];
     memset(AP_NameChar, 0, AP_NameString.length() + 1);
     for (int i = 0; i < AP_NameString.length(); i++)
@@ -1086,6 +1093,8 @@ void setup() {
 
     autoPlayTimeout = millis() + (autoplayDuration * 1000);
 }
+
+
 void sendInt(uint8_t value)
 {
     sendString(String(value));
@@ -1221,6 +1230,33 @@ void loop() {
         sendStatus();
     }
 #endif
+
+#ifdef PHY_SW_PIN
+    if (digitalRead(PHY_SW_PIN) == 0) {
+      if(phySwDebounce < 100) {
+        phySwDebounce += 1;
+        if (phySwDebounce > 10) {
+          // Switch active
+          phySwDebounce = 150;
+#ifdef PHY_SW_MOM
+          if(power==1) {
+            setPower(0);
+          }else{
+            setPower(1);
+          }
+#else
+          if(power == 1) setPower(0);
+#endif // phy_sw_mom
+      }
+    }
+    }else{
+      // PHY_SW_PIN is high
+#ifndef PHY_SW_MOM
+      if (phySwDebounce == 0 && power == 0) setPower(1);
+#endif
+      phySwDebounce = 0;
+    }
+#endif // phy_sw_pin
 
     if (power == 0) {
         fill_solid(leds, NUM_LEDS, CRGB::Black);
