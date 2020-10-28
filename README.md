@@ -6,7 +6,7 @@ Hotachanges:
 
 Features in this fork that have not yet been pushed upstream:
 
-Soft On/Off switch supporting toggle and momentary switches
+Soft On/Off switch supporting toggle and momentary switches.<br>
 The defined Hostname is also used as the base ssid for the AP.
 
 This is a fork of [jasoncoon's esp8266 fastled webserver](https://github.com/jasoncoon/esp8266-fastled-webserver) that was adapted to control the colors of my  [LED-Projects](https://www.thingiverse.com/Surrbradl08/designs).
